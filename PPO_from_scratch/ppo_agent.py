@@ -138,8 +138,8 @@ class Agent:
     def choose_action(self, observation):
         state = T.tensor([observation], dtype=T.float).to(self.actor.device)
 
-        dist = self.actor.forward(state)
-        value = self.critic.forward(state)
+        dist = self.actor(state)
+        value = self.critic(state)
         action = dist.sample()
 
         prob = T.squeeze(dist.log_prob(action)).item()
