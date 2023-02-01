@@ -67,14 +67,26 @@ class DQNMemory:
 
 
 class Agent:
-    def __init__(self, state_dims, action_dims, alpha, e_greedy):
+    def __init__(self, state_dims, action_dims, alpha, e_greedy, batch_size):
+        self.state_dims = state_dims
+        self.action_dims = action_dims
         self.e_greedy = e_greedy
+        self.reply_buffer = DQNMemory(batch_size)
         self.Q_func = QNetwork(state_dims, action_dims, alpha)
 
     def choose_action(self, observation):
-        state = T.tensor([observation], dtype=T.float).to(self.Q_func.device)
+        state = T.tensor(np.array([observation]), dtype=T.float).to(self.Q_func.device)
+        if np.random.rand() < self.e_greedy:
+            action = np.random.choice(self.action_dims)
+        else:
+            action = int(T.argmax(self.Q_func(state)))
+        return action
 
+    def remember(self, state, state_, action, reward, done):
+        self.reply_buffer.store_memory(state, state_, action, reward, done)
 
+    def learn(self):
+        pass
 
     def save(self):
         pass
