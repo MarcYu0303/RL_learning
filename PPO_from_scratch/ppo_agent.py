@@ -110,9 +110,8 @@ class CriticNetwork(nn.Module):
 
 
 class Agent:
-    def __init__(self, n_actions, input_dims, gamma=0.99, alpha=0.003,
-                 gae_lambda=0.95, policy_clip=0.2, batch_size=64, N=2048,
-                 n_epochs=10):
+    def __init__(self, n_actions, input_dims, gamma=0.99, alpha=0.0003,
+                 gae_lambda=0.95, policy_clip=0.2, batch_size=64, n_epochs=10):
         self.gamma = gamma
         self.policy_clip = policy_clip
         self.n_epochs = n_epochs
@@ -131,7 +130,7 @@ class Agent:
         self.critic.save_checkpoint()
 
     def load_model(self):
-        print('...loading model')
+        print('...loading model...')
         self.actor.load_checkpoint()
         self.critic.load_checkpoint()
 
@@ -182,13 +181,14 @@ class Agent:
                 new_probs = dist.log_prob(actions)
                 prob_ratio = new_probs.exp() / old_probs.exp()  # equation 6
                 weight_probs = prob_ratio * advantage[batch]  # equation 6
-                weight_clipped_probs = T.clamp(prob_ratio, 1-self.policy_clip,
-                                               1 + self.policy_clip)
+                weight_clipped_probs = T.clamp(prob_ratio, 1 - self.policy_clip,
+                                               1 + self.policy_clip) \
+                                       * advantage[batch]
                 actor_loss = -T.min(weight_probs, weight_clipped_probs).mean()
                 # equation 7 (gradient ascent s.t. minus sign)
 
                 returns = advantage[batch] + values[batch]
-                critic_loss = (returns - critic_value)**2
+                critic_loss = (returns - critic_value) ** 2
                 critic_loss = critic_loss.mean()
 
                 total_loss = 0.5 * critic_loss + actor_loss
@@ -198,9 +198,3 @@ class Agent:
                 self.actor.optimizer.step()
                 self.critic.optimizer.step()
         self.memory.clear_memory()
-
-
-
-
-
-
