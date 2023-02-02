@@ -9,7 +9,7 @@ class QNetwork(nn.Module):
     def __init__(self, input_dims, output_dims, alpha, fc1_dims=50, fc2_dims=50, path_dir='./'):
         super(QNetwork, self).__init__()
 
-        self.checkpoint_file = os.path.join(path_dir, 'Q_Network_module')
+        self.checkpoint_file = os.path.join(path_dir, 'Q_Network_module.ckpt')
         self.MLP = nn.Sequential(
             nn.Linear(input_dims, fc1_dims),
             nn.ReLU(),
@@ -29,7 +29,8 @@ class QNetwork(nn.Module):
         T.save(self.state_dict(), self.checkpoint_file)
 
     def load_checkpoint(self):
-        T.load(self.state_dict)
+        self.load_state_dict(T.load(self.checkpoint_file))
+
 
 class DQNMemory:
     def __init__(self, batch_size):
@@ -46,7 +47,7 @@ class DQNMemory:
         batch_start_indices = np.arange(0, n_states, self.batch_size)
         indices = np.arange(0, n_states)
         np.random.shuffle(indices)
-        batches = [indices[i:i+self.batch_size] for i in batch_start_indices]
+        batches = [indices[i:i + self.batch_size] for i in batch_start_indices]
 
         return np.array(self.states), np.array(self.states_), np.array(self.actions), \
                np.array(self.rewards), np.array(self.dones), batches
@@ -67,12 +68,17 @@ class DQNMemory:
 
 
 class Agent:
-    def __init__(self, state_dims, action_dims, alpha, e_greedy, batch_size):
+    def __init__(self, state_dims, action_dims, alpha, e_greedy,
+                 batch_size, n_epochs, gamma):
         self.state_dims = state_dims
         self.action_dims = action_dims
         self.e_greedy = e_greedy
+        self.n_epochs = n_epochs
+        self.gamma = gamma
         self.reply_buffer = DQNMemory(batch_size)
         self.Q_func = QNetwork(state_dims, action_dims, alpha)
+        self.loss = nn.MSELoss()
+        self.device = self.Q_func.device
 
     def choose_action(self, observation):
         state = T.tensor(np.array([observation]), dtype=T.float).to(self.Q_func.device)
@@ -86,7 +92,28 @@ class Agent:
         self.reply_buffer.store_memory(state, state_, action, reward, done)
 
     def learn(self):
-        pass
+        for _ in range(self.n_epochs):
+            states_arr, states_arr_, actions_arr, rewards_arr, \
+            dones_arr, batches = self.reply_buffer.generate_batch()
+
+            states, states_ = T.tensor(states_arr, dtype=T.float).to(self.device), \
+            T.tensor(states_arr_, dtype=T.float).to(self.device)
+            rewards = T.tensor(rewards_arr, dtype=T.float).to(self.device)
+
+            for batch in batches:
+                q = self.Q_func(states[batch])
+                q_ = self.Q_func(states_[batch])
+                TD_target = rewards[batch] + self.gamma * q_
+
+                Loss = self.loss(q, TD_target).to(self.device)
+                self.Q_func.optimizer.zero_grad()
+                Loss.backward()
+                self.Q_func.optimizer.step()
+        self.reply_buffer.clear_memory()
+
+
+
+
 
     def save(self):
         pass
