@@ -3,15 +3,17 @@ import torch.nn as nn
 import torch.optim as optim
 import os
 import numpy as np
+from collections import deque
 
 
 class QNetwork(nn.Module):
-    def __init__(self, input_dims, output_dims, alpha, fc1_dims=50, fc2_dims=50, path_dir='./'):
+    def __init__(self, input_dims, output_dims, alpha, fc1_dims=50,
+                 fc2_dims=50, path_dir='./'):
         super(QNetwork, self).__init__()
 
         self.checkpoint_file = os.path.join(path_dir, 'Q_Network_module.ckpt')
         self.MLP = nn.Sequential(
-            nn.Linear(input_dims, fc1_dims),
+            nn.Linear(*input_dims, fc1_dims),
             nn.ReLU(),
             nn.Linear(fc1_dims, fc2_dims),
             nn.ReLU(),
@@ -33,24 +35,23 @@ class QNetwork(nn.Module):
 
 
 class DQNMemory:
-    def __init__(self, batch_size):
-        self.states = []
-        self.states_ = []
-        self.actions = []
-        self.rewards = []
-        self.dones = []
+    def __init__(self, batch_size, max_length = 1000):
+        self.states = deque([], maxlen=max_length)
+        self.states_ = deque([], maxlen=max_length)
+        self.actions = deque([], maxlen=max_length)
+        self.rewards = deque([], maxlen=max_length)
+        self.dones = deque([], maxlen=max_length)
 
         self.batch_size = batch_size
+        self.max_length = max_length
 
     def generate_batch(self):
         n_states = len(self.states)
-        batch_start_indices = np.arange(0, n_states, self.batch_size)
         indices = np.arange(0, n_states)
-        np.random.shuffle(indices)
-        batches = [indices[i:i + self.batch_size] for i in batch_start_indices]
+        batch = np.random.sample(indices, self.batch_size)
 
         return np.array(self.states), np.array(self.states_), np.array(self.actions), \
-               np.array(self.rewards), np.array(self.dones), batches
+               np.array(self.rewards), np.array(self.dones), batch
 
     def store_memory(self, state, state_, action, reward, done):
         self.states.append(state)
@@ -60,12 +61,11 @@ class DQNMemory:
         self.dones.append(done)
 
     def clear_memory(self):
-        self.states = []
-        self.states_ = []
-        self.actions = []
-        self.rewards = []
-        self.dones = []
-
+        self.states = deque([], maxlen=self.max_length)
+        self.states_ = deque([], maxlen=self.max_length)
+        self.actions = deque([], maxlen=self.max_length)
+        self.rewards = deque([], maxlen=self.max_length)
+        self.dones = deque([], maxlen=self.max_length)
 
 class Agent:
     def __init__(self, state_dims, action_dims, alpha, e_greedy,
@@ -94,29 +94,24 @@ class Agent:
     def learn(self):
         for _ in range(self.n_epochs):
             states_arr, states_arr_, actions_arr, rewards_arr, \
-            dones_arr, batches = self.reply_buffer.generate_batch()
+            dones_arr, batch = self.reply_buffer.generate_batch()
 
             states, states_ = T.tensor(states_arr, dtype=T.float).to(self.device), \
             T.tensor(states_arr_, dtype=T.float).to(self.device)
             rewards = T.tensor(rewards_arr, dtype=T.float).to(self.device)
 
-            for batch in batches:
-                q = self.Q_func(states[batch])
-                q_ = self.Q_func(states_[batch])
-                TD_target = rewards[batch] + self.gamma * q_
+            q = self.Q_func(states[batch])
+            q_ = self.Q_func(states_[batch])
+            TD_target = rewards[batch] + self.gamma * q_
+            Loss = self.loss(q, TD_target).to(self.device)
+            self.Q_func.optimizer.zero_grad()
+            Loss.backward()
+            self.Q_func.optimizer.step()
 
-                Loss = self.loss(q, TD_target).to(self.device)
-                self.Q_func.optimizer.zero_grad()
-                Loss.backward()
-                self.Q_func.optimizer.step()
         self.reply_buffer.clear_memory()
 
-
-
-
-
     def save(self):
-        pass
+        self.Q_func.save_checkpoint()
 
     def load(self):
-        pass
+        self.Q_func.load_checkpoint()
