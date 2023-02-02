@@ -2,9 +2,11 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="b7ef507b-0766-4925-bf0e-46dc0aab1ad6" name="Default Changelist" comment="latest change">
-      <change afterPath="$PROJECT_DIR$/DQN_from_scratch/DQN_main.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/DQN_from_scratch/utils.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/DQN_from_scratch/DQN_agent.py" beforeDir="false" afterPath="$PROJECT_DIR$/DQN_from_scratch/DQN_agent.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/DQN_from_scratch/DQN_main.py" beforeDir="false" afterPath="$PROJECT_DIR$/DQN_from_scratch/DQN_main.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/PPO_from_scratch/ppo_main.py" beforeDir="false" afterPath="$PROJECT_DIR$/PPO_from_scratch/ppo_main.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -47,6 +49,48 @@
       <option name="ADD_CONTENT_ROOTS" value="true" />
       <option name="ADD_SOURCE_ROOTS" value="true" />
       <option name="SCRIPT_NAME" value="$PROJECT_DIR$/Actor-Critic/A2C.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+    <configuration name="DQN_main (1)" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+      <module name="RL_Learning" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="D:\Anaconda3\envs\RL\python.exe" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/DQN" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/DQN/DQN_main.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+    <configuration name="DQN_main" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+      <module name="RL_Learning" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="D:\Anaconda3\envs\RL\python.exe" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/DQN_from_scratch" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/DQN_from_scratch/DQN_main.py" />
       <option name="PARAMETERS" value="" />
       <option name="SHOW_COMMAND_LINE" value="false" />
       <option name="EMULATE_TERMINAL" value="false" />
@@ -121,6 +165,8 @@
     <recent_temporary>
       <list>
         <item itemvalue="Python.ppo_main" />
+        <item itemvalue="Python.DQN_main" />
+        <item itemvalue="Python.DQN_main (1)" />
         <item itemvalue="Python.REINFORCE" />
         <item itemvalue="Python.A2C" />
       </list>
@@ -174,5 +220,23 @@
   <component name="VcsManagerConfiguration">
     <MESSAGE value="latest change" />
     <option name="LAST_COMMIT_MESSAGE" value="latest change" />
+  </component>
+  <component name="XDebuggerManager">
+    <breakpoint-manager>
+      <breakpoints>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/DQN/DQN_main.py</url>
+          <line>78</line>
+          <option name="timeStamp" value="15" />
+        </line-breakpoint>
+      </breakpoints>
+      <default-breakpoints>
+        <breakpoint type="python-exception">
+          <properties notifyOnTerminate="true" exception="BaseException">
+            <option name="notifyOnTerminate" value="true" />
+          </properties>
+        </breakpoint>
+      </default-breakpoints>
+    </breakpoint-manager>
   </component>
 </project>

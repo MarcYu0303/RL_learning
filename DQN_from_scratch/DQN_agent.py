@@ -13,7 +13,7 @@ class QNetwork(nn.Module):
 
         self.checkpoint_file = os.path.join(path_dir, 'Q_Network_module.ckpt')
         self.MLP = nn.Sequential(
-            nn.Linear(*input_dims, fc1_dims),
+            nn.Linear(input_dims, fc1_dims),
             nn.ReLU(),
             nn.Linear(fc1_dims, fc2_dims),
             nn.ReLU(),
@@ -35,7 +35,7 @@ class QNetwork(nn.Module):
 
 
 class DQNMemory:
-    def __init__(self, batch_size, max_length = 1000):
+    def __init__(self, batch_size, max_length=3000):
         self.states = deque([], maxlen=max_length)
         self.states_ = deque([], maxlen=max_length)
         self.actions = deque([], maxlen=max_length)
@@ -48,7 +48,7 @@ class DQNMemory:
     def generate_batch(self):
         n_states = len(self.states)
         indices = np.arange(0, n_states)
-        batch = np.random.sample(indices, self.batch_size)
+        batch = np.random.choice(indices, self.batch_size)
 
         return np.array(self.states), np.array(self.states_), np.array(self.actions), \
                np.array(self.rewards), np.array(self.dones), batch
@@ -67,6 +67,10 @@ class DQNMemory:
         self.rewards = deque([], maxlen=self.max_length)
         self.dones = deque([], maxlen=self.max_length)
 
+    def __len__(self):
+        return len(self.states)
+
+
 class Agent:
     def __init__(self, state_dims, action_dims, alpha, e_greedy,
                  batch_size, n_epochs, gamma):
@@ -79,6 +83,7 @@ class Agent:
         self.Q_func = QNetwork(state_dims, action_dims, alpha)
         self.loss = nn.MSELoss()
         self.device = self.Q_func.device
+        self.batch_size = self.reply_buffer.batch_size
 
     def choose_action(self, observation):
         state = T.tensor(np.array([observation]), dtype=T.float).to(self.Q_func.device)
@@ -98,20 +103,25 @@ class Agent:
 
             states, states_ = T.tensor(states_arr, dtype=T.float).to(self.device), \
             T.tensor(states_arr_, dtype=T.float).to(self.device)
+            actions = T.tensor(actions_arr, dtype=T.int).to(self.device)
+            dones = T.tensor(dones_arr, dtype=T.bool).to(self.device)
             rewards = T.tensor(rewards_arr, dtype=T.float).to(self.device)
 
-            q = self.Q_func(states[batch])
-            q_ = self.Q_func(states_[batch])
+            q = self.Q_func(states[batch])[np.arange(self.batch_size), actions_arr[batch]]
+            q_ = self.Q_func(states_[batch]).max(dim=1)[0]
+            q_[dones[batch]] = 0.0
+
             TD_target = rewards[batch] + self.gamma * q_
             Loss = self.loss(q, TD_target).to(self.device)
+            Loss = Loss.requires_grad_()
             self.Q_func.optimizer.zero_grad()
             Loss.backward()
             self.Q_func.optimizer.step()
 
-        self.reply_buffer.clear_memory()
-
     def save(self):
+        print('...saving...')
         self.Q_func.save_checkpoint()
 
     def load(self):
+        print('...loading...')
         self.Q_func.load_checkpoint()
