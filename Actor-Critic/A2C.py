@@ -105,6 +105,7 @@ if __name__ == '__main__':
     env = gym.make(env_name[env_index])
     env_evaluate = gym.make(env_name[env_index])  # When evaluating the policy, we need to rebuild an environment
     number = 9
+
     # Set random seed
     seed = 0
     env.seed(seed)
