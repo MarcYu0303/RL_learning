@@ -164,3 +164,4 @@ if __name__ == '__main__':
                     np.save('./data_train/A2C_env_{}_number_{}_seed_{}.npy'.format(env_name[env_index], number, seed), np.array(evaluate_rewards))
 
             total_steps += 1
+
