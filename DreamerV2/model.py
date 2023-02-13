@@ -51,6 +51,7 @@ class WorldModel(nn.Module):
         )
 
         #p: (h, z) -> r_hat
+        # r_hat is predicted reward value
         self.r_predictor_mlp = nn.Sequential(
             nn.Linear(1024+512, 256),
             nn.ELU(inplace=True),
@@ -65,7 +66,7 @@ class WorldModel(nn.Module):
             nn.Linear(256,1)
         )
 
-        #p: (h,z) -> x_hat
+        #p: (h, z) -> x_hat
         self.x_hat_predictor_mlp = nn.Sequential(
             nn.Linear(1024+512, 1024),
             nn.ELU(inplace=True),
@@ -109,7 +110,7 @@ class WorldModel(nn.Module):
             z_logit:  logits of z_t
             z_sample: z_t
         """
-        embedding = self.representation_model_conv(x)
+        embedding = self.representation_model_conv(x) # (x) -> xembedded
         embedding = embedding.reshape(-1, 512)
         embedding = torch.cat((h, embedding), dim=1)
         z_logits = self.representation_model_mlp(embedding)
