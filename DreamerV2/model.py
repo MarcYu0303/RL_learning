@@ -14,6 +14,7 @@ class WorldModel(nn.Module):
         )
 
         #q (1st part): (x) -> xembedded
+        # x_t is current image, x_t is encoded using CNN
         self.representation_model_conv = nn.Sequential(
             #1,64,64
             nn.Conv2d(3, 32, 3, padding=1, stride=2), #32,32,32
@@ -28,6 +29,9 @@ class WorldModel(nn.Module):
             nn.ELU(inplace=True)
         )
         #q (2nd part): (h, xembedded) -> z
+        # h_t is deterministic recurrent state
+        # z_t is posterior stochastic state (posterior because it cludes 
+            # the information of current image x_t)
         self.representation_model_mlp = nn.Sequential(
             nn.Linear(512+512, 1024),
             nn.ELU(inplace=True),
@@ -37,6 +41,7 @@ class WorldModel(nn.Module):
         )
 
         #p: (h) -> z_hat
+        # z_hat prior stochastic state
         self.transition_predictor = nn.Sequential(
             nn.Linear(512, 1024),
             nn.ELU(inplace=True),
