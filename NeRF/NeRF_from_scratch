@@ -1,5 +1,7 @@
 import torch
+from tqdm import tqdm
 import torch.nn as nn
+from torch.utils.data import DataLoader
 
 class NeRFModel(nn.Module):
     def __init__(self, x_embedding_dim=10, d_embedding_dim=4,
@@ -58,4 +60,17 @@ class NeRFModel(nn.Module):
         c = self.block4(h)
         return c, sigma
 
-
+def train(nerf_model, data_loader, device,  num_epochs=int(1e5)):
+    train_loss = []
+    for _ in tqdm(range(num_epochs)):
+        for batch in data_loader:
+            ray_position = batch[:, 3].to(device)
+            ray_direction = batch[:, 3:6].to(device)
+            ground_truth_pixels = batch[:, 6:].to(device)
+            
+            # haven't finish yet
+            pass
+            
+            
+if __name__ == '__main__':
+    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
