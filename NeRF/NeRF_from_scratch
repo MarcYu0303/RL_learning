@@ -1,0 +1,61 @@
+import torch
+import torch.nn as nn
+
+class NeRFModel(nn.Module):
+    def __init__(self, x_embedding_dim=10, d_embedding_dim=4,
+                 hidden_dim=256) -> None:
+        super().__init__()
+        self.block1 = nn.Sequential(
+            # +3 --> output = [p]
+            # *6 --> for loop: 2(sin,cos) * 3(dimensions) 
+            nn.Linear(3 + x_embedding_dim * 6, hidden_dim), nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim), nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim), nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim), nn.ReLU(),
+        )
+        
+        self.block2 = nn.Sequential( # input == block1_output + embedded_input
+            nn.Linear(3 + x_embedding_dim * 6 + hidden_dim, hidden_dim), nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim), nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim), nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim + 1), # +1 is volume density output
+            # no nn.ReLU here (see Fig.7)
+        )
+        
+        self.block3 = nn.Sequential(
+            nn.Linear(3 + d_embedding_dim * 6 + hidden_dim, hidden_dim // 2), 
+            nn.ReLU(),)
+        
+        self.block4 = nn.Sequential( # output is RGB (emitted color)
+            nn.Linear(hidden_dim // 2, 3), nn.Sigmoid(),)
+        
+        self.x_embedding_dim = x_embedding_dim
+        self.d_embedding_dim = d_embedding_dim
+    
+    @staticmethod
+    def positional_embedding(p, embedding_length):
+        """
+        p_embedded = (sin(pi*p), cos(pi*p), ... , sin(2^(L-1)*pi*p), cos(2^(L-1)*pi*p))
+        input: 
+            p (could be coordinate position or viewing direction)
+            embedding_length
+        output:
+            embedding output
+        """
+        output = [p] #
+        for j in embedding_length:
+            output.append(torch.sin(2**j * p))
+            output.append(torch.cos(2**j * p))
+        return torch.cat(output, dim=1)
+    
+    def forward(self, o, d):
+        x_embedding = self.positional_embedding(o, self.x_embedding_dim)
+        d_embedding = self.positional_embedding(d, self.d_embedding_dim)
+        h = self.block1(x_embedding)
+        h_and_sigma = self.block2(torch.cat((h, x_embedding), dim=1))
+        h, sigma = h_and_sigma[:, :-1], nn.ReLU(sigma) # ReLU ensures volume density positive
+        h = self.block3(torch.cat((h, d_embedding), dim=1))
+        c = self.block4(h)
+        return c, sigma
+
+
