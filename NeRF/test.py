@@ -3,8 +3,9 @@ import torch
 
 
 if __name__ == '__main__':
-    a = torch.tensor([[1,2], [3,4]])
-    c = torch.cumprod(a, dim=1)
-    
-    print(a[0])
-    print(c)
+    x = torch.linspace(0, 5, 5)
+    print(x, x.shape)
+ 
+    y=x.expand(3, 5)
+ 
+    print(y, y.shape)
