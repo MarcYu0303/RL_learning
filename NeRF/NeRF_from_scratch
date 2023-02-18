@@ -1,0 +1,95 @@
+import torch
+from tqdm import tqdm
+import torch.nn as nn
+from torch.utils.data import DataLoader
+
+class NeRFModel(nn.Module):
+    def __init__(self, x_embedding_dim=10, d_embedding_dim=4,
+                 hidden_dim=256) -> None:
+        super().__init__()
+        self.block1 = nn.Sequential(
+            # +3 --> output = [p]
+            # *6 --> for loop: 2(sin,cos) * 3(dimensions) 
+            nn.Linear(3 + x_embedding_dim * 6, hidden_dim), nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim), nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim), nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim), nn.ReLU(),
+        )
+        
+        self.block2 = nn.Sequential( # input == block1_output + embedded_input
+            nn.Linear(3 + x_embedding_dim * 6 + hidden_dim, hidden_dim), nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim), nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim), nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim + 1), # +1 is volume density output
+            # no nn.ReLU here (see Fig.7)
+        )
+        
+        self.block3 = nn.Sequential(
+            nn.Linear(3 + d_embedding_dim * 6 + hidden_dim, hidden_dim // 2), 
+            nn.ReLU(),)
+        
+        self.block4 = nn.Sequential( # output is RGB (emitted color)
+            nn.Linear(hidden_dim // 2, 3), nn.Sigmoid(),)
+        
+        self.x_embedding_dim = x_embedding_dim
+        self.d_embedding_dim = d_embedding_dim
+    
+    @staticmethod
+    def positional_embedding(p, embedding_length):
+        """
+        p_embedded = (sin(pi*p), cos(pi*p), ... , sin(2^(L-1)*pi*p), cos(2^(L-1)*pi*p))
+        input: 
+            p (could be coordinate position or viewing direction)
+            embedding_length
+        output:
+            embedding output
+        """
+        output = [p] #
+        for j in embedding_length:
+            output.append(torch.sin(2**j * p))
+            output.append(torch.cos(2**j * p))
+        return torch.cat(output, dim=1)
+    
+    def forward(self, o, d):
+        x_embedding = self.positional_embedding(o, self.x_embedding_dim)
+        d_embedding = self.positional_embedding(d, self.d_embedding_dim)
+        h = self.block1(x_embedding)
+        h_and_sigma = self.block2(torch.cat((h, x_embedding), dim=1))
+        h, sigma = h_and_sigma[:, :-1], nn.ReLU(sigma) # ReLU ensures volume density positive
+        h = self.block3(torch.cat((h, d_embedding), dim=1))
+        c = self.block4(h)
+        return c, sigma
+
+def volume_rendering(nerf_model, ray_origin, ray_direction, tn=0, tf=0.5, num_bins=192):
+    '''
+    input:
+        num_bins: number of sampling points in a ray (192 --> fine network; 64 --> courase)
+        
+    '''
+    device = ray_origin.device
+    t = torch.linspace(tn, tf, num_bins, device=device).expand(ray_origin.shape[0], num_bins)
+    # exapnd ray_origin.shape[0] times along the 0 dimension
+    
+    pass
+
+def train(nerf_model, data_loader, optimizer, scheduler,  device, num_epochs=int(1e5)):
+    training_loss = []
+    for _ in tqdm(range(num_epochs)):
+        for batch in data_loader:
+            ray_origin = batch[:, 3].to(device)
+            ray_direction = batch[:, 3:6].to(device)
+            ground_truth_pixels = batch[:, 6:].to(device)
+            regenerated_pixels = volume_rendering(nerf_model, ray_origin, ray_direction)            
+            
+            loss = nn.functional.mse_loss(ground_truth_pixels, regenerated_pixels)
+            optimizer.zero_grade()
+            loss.backward()
+            optimizer.step()
+            training_loss.append(loss.item)
+        scheduler.step() # scheduler is used to change lr after certain epochs
+        
+    return training_loss
+            
+            
+if __name__ == '__main__':
+    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')

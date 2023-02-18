@@ -14,8 +14,9 @@ class WorldModel(nn.Module):
         )
 
         #q (1st part): (x) -> xembedded
+        # x_t is current image, x_t is encoded using CNN
         self.representation_model_conv = nn.Sequential(
-            #1,64,64
+            #3,64,64
             nn.Conv2d(3, 32, 3, padding=1, stride=2), #32,32,32
             nn.ELU(inplace=True),
             nn.Conv2d(32, 64, 3, padding=1, stride=2), #64,16,16
@@ -28,6 +29,9 @@ class WorldModel(nn.Module):
             nn.ELU(inplace=True)
         )
         #q (2nd part): (h, xembedded) -> z
+        # h_t is deterministic recurrent state
+        # z_t is posterior stochastic state (posterior because it cludes 
+            # the information of current image x_t)
         self.representation_model_mlp = nn.Sequential(
             nn.Linear(512+512, 1024),
             nn.ELU(inplace=True),
@@ -37,6 +41,7 @@ class WorldModel(nn.Module):
         )
 
         #p: (h) -> z_hat
+        # z_hat prior stochastic state
         self.transition_predictor = nn.Sequential(
             nn.Linear(512, 1024),
             nn.ELU(inplace=True),
@@ -46,6 +51,7 @@ class WorldModel(nn.Module):
         )
 
         #p: (h, z) -> r_hat
+        # r_hat is predicted reward value
         self.r_predictor_mlp = nn.Sequential(
             nn.Linear(1024+512, 256),
             nn.ELU(inplace=True),
@@ -60,7 +66,7 @@ class WorldModel(nn.Module):
             nn.Linear(256,1)
         )
 
-        #p: (h,z) -> x_hat
+        #p: (h, z) -> x_hat
         self.x_hat_predictor_mlp = nn.Sequential(
             nn.Linear(1024+512, 1024),
             nn.ELU(inplace=True),
@@ -104,7 +110,7 @@ class WorldModel(nn.Module):
             z_logit:  logits of z_t
             z_sample: z_t
         """
-        embedding = self.representation_model_conv(x)
+        embedding = self.representation_model_conv(x) # (x) -> xembedded
         embedding = embedding.reshape(-1, 512)
         embedding = torch.cat((h, embedding), dim=1)
         z_logits = self.representation_model_mlp(embedding)
@@ -158,7 +164,7 @@ class WorldModel(nn.Module):
         z_logits = self.representation_model_mlp(embedding)
         z_sample = torch.distributions.one_hot_categorical.OneHotCategorical(
             logits=z_logits.reshape(-1, 32, 32)
-        ).sample()
+        ).sample() # sample based on given probabilities, output is one-hot vector
         #no straight-though gradient
         return z_sample, h
 
