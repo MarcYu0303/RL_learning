@@ -3,9 +3,7 @@ import torch
 
 
 if __name__ == '__main__':
-    x = torch.linspace(0, 5, 5)
-    print(x, x.shape)
- 
-    y=x.expand(3, 5)
- 
-    print(y, y.shape)
+    a = torch.cat((torch.tensor([0]), torch.tensor([1, 2])))
+    a = a.unsqueeze(2)
+    print(a)
+    print(a.shape)

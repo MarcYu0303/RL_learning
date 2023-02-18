@@ -60,26 +60,53 @@ class NeRFModel(nn.Module):
         c = self.block4(h)
         return c, sigma
 
-def volume_rendering(nerf_model, ray_origin, ray_direction, tn=0, tf=0.5, num_bins=192):
+def volume_rendering(nerf_model, ray_origins, ray_directions, tn=0, tf=0.5, num_bins=192):
     '''
     input:
+        ray_origins: [batch_size, 3]
+        ray_directions: [batch_size, 3]
         num_bins: number of sampling points in a ray (192 --> fine network; 64 --> courase)
-        
-    '''
-    device = ray_origin.device
-    t = torch.linspace(tn, tf, num_bins, device=device).expand(ray_origin.shape[0], num_bins)
-    # exapnd ray_origin.shape[0] times along the 0 dimension
+    Generated variables:
+        t: uniform sample from bins
+        delta: delta_i = t_i+1 - t_i    
     
-    pass
-
+    '''
+    device = ray_origins.device
+    t = torch.linspace(tn, tf, num_bins, device=device).expand(ray_origins.shape[0], num_bins)
+    # exapnd ray_origins.shape[0] (number of rays) times along the 0 dimension
+    
+    # generate bins upper and lower bounds
+    mid = (t[:, :-1] - t[:, 1:]) / 2
+    lower = torch.cat((t[:, :1], mid), -1)
+    upper = torch.cat((mid, t[:, ]), -1)
+    u =  torch.rand(t.shape, device=device) # perturb sampling  
+    t = lower + (upper - lower) * u # [batch_size, num_bins]
+    
+    delta = t[:, 1:] - t[:, :-1]
+    x = ray_origins.unsqueeze(1) + t.unsqueeze(2) * ray_directions.unsqueeze(1)   # [batch_size, nb_bins, 3]
+    ray_directions = ray_directions.expand(num_bins, ray_directions.shape[0], 3).transpose(0, 1)
+    
+    colors, sigma = nerf_model(x.reshape(-1, 3), ray_directions(-1, 3))
+    colors = colors.reshape(x.shape)
+    sigma = sigma.reshape(x.shape[:-1])
+    
+    alpha = 1 - torch.exp(-sigma * delta)  # [batch_size, nb_bins]
+    weights = compute_accumulated_transmittance(1 - alpha).unsqueeze(2) * alpha.unsqueeze(2)
+    c = (weights * colors).sum(dims=1) # pixel values
+    weight_sum = weights.sum(-1).sum(-1)  # Regularization for white background
+    return c + 1 - weight_sum.unsqueeze(-1)
+    
+def compute_accumulated_transmittance():
+    pass 
+    
 def train(nerf_model, data_loader, optimizer, scheduler,  device, num_epochs=int(1e5)):
     training_loss = []
     for _ in tqdm(range(num_epochs)):
         for batch in data_loader:
-            ray_origin = batch[:, 3].to(device)
-            ray_direction = batch[:, 3:6].to(device)
+            ray_origins = batch[:, 3].to(device)
+            ray_directions = batch[:, 3:6].to(device)
             ground_truth_pixels = batch[:, 6:].to(device)
-            regenerated_pixels = volume_rendering(nerf_model, ray_origin, ray_direction)            
+            regenerated_pixels = volume_rendering(nerf_model, ray_origins, ray_directions)            
             
             loss = nn.functional.mse_loss(ground_truth_pixels, regenerated_pixels)
             optimizer.zero_grade()
