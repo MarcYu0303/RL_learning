@@ -1,12 +1,14 @@
 import torch
 from tqdm import tqdm
 import torch.nn as nn
+import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
+import numpy as np
 
 class NeRFModel(nn.Module):
     def __init__(self, x_embedding_dim=10, d_embedding_dim=4,
                  hidden_dim=256) -> None:
-        super().__init__()
+        super(NeRFModel, self).__init__()
         self.block1 = nn.Sequential(
             # +3 --> output = [p]
             # *6 --> for loop: 2(sin,cos) * 3(dimensions) 
@@ -33,6 +35,7 @@ class NeRFModel(nn.Module):
         
         self.x_embedding_dim = x_embedding_dim
         self.d_embedding_dim = d_embedding_dim
+        self.ReLU = nn.ReLU()
     
     @staticmethod
     def positional_embedding(p, embedding_length):
@@ -45,7 +48,7 @@ class NeRFModel(nn.Module):
             embedding output
         """
         output = [p] #
-        for j in embedding_length:
+        for j in range(embedding_length):
             output.append(torch.sin(2**j * p))
             output.append(torch.cos(2**j * p))
         return torch.cat(output, dim=1)
@@ -55,7 +58,7 @@ class NeRFModel(nn.Module):
         d_embedding = self.positional_embedding(d, self.d_embedding_dim)
         h = self.block1(x_embedding)
         h_and_sigma = self.block2(torch.cat((h, x_embedding), dim=1))
-        h, sigma = h_and_sigma[:, :-1], nn.ReLU(sigma) # ReLU ensures volume density positive
+        h, sigma = h_and_sigma[:, :-1], self.ReLU(h_and_sigma[:, -1]) # ReLU ensures volume density positive
         h = self.block3(torch.cat((h, d_embedding), dim=1))
         c = self.block4(h)
         return c, sigma
@@ -69,7 +72,8 @@ def volume_rendering(nerf_model, ray_origins, ray_directions, tn=0, tf=0.5, num_
     Generated variables:
         t: uniform sample from bins
         delta: delta_i = t_i+1 - t_i    
-    
+    Ouput:
+        generated pixel values
     '''
     device = ray_origins.device
     t = torch.linspace(tn, tf, num_bins, device=device).expand(ray_origins.shape[0], num_bins)
@@ -78,32 +82,58 @@ def volume_rendering(nerf_model, ray_origins, ray_directions, tn=0, tf=0.5, num_
     # generate bins upper and lower bounds
     mid = (t[:, :-1] - t[:, 1:]) / 2
     lower = torch.cat((t[:, :1], mid), -1)
-    upper = torch.cat((mid, t[:, ]), -1)
-    u =  torch.rand(t.shape, device=device) # perturb sampling  
+    upper = torch.cat((mid, t[:, -1:]), -1)
+    u =  torch.rand(t.shape, device=device) # perturb sampling 
     t = lower + (upper - lower) * u # [batch_size, num_bins]
     
-    delta = t[:, 1:] - t[:, :-1]
+    delta = torch.cat((t[:, 1:] - t[:, :-1], torch.tensor([1e10], device=device).expand(ray_origins.shape[0], 1)), -1)
+    
     x = ray_origins.unsqueeze(1) + t.unsqueeze(2) * ray_directions.unsqueeze(1)   # [batch_size, nb_bins, 3]
     ray_directions = ray_directions.expand(num_bins, ray_directions.shape[0], 3).transpose(0, 1)
     
-    colors, sigma = nerf_model(x.reshape(-1, 3), ray_directions(-1, 3))
+    colors, sigma = nerf_model(x.reshape(-1, 3), ray_directions.reshape(-1, 3))
     colors = colors.reshape(x.shape)
     sigma = sigma.reshape(x.shape[:-1])
     
     alpha = 1 - torch.exp(-sigma * delta)  # [batch_size, nb_bins]
     weights = compute_accumulated_transmittance(1 - alpha).unsqueeze(2) * alpha.unsqueeze(2)
-    c = (weights * colors).sum(dims=1) # pixel values
+    c = (weights * colors).sum(dim=1) # pixel values
     weight_sum = weights.sum(-1).sum(-1)  # Regularization for white background
     return c + 1 - weight_sum.unsqueeze(-1)
     
-def compute_accumulated_transmittance():
-    pass 
-    
-def train(nerf_model, data_loader, optimizer, scheduler,  device, num_epochs=int(1e5)):
+def compute_accumulated_transmittance(alphas):
+    '''
+    accumulated transmittance: T_i * alpha = exp(-1 * sum{sigma_i * delta_i}) * alpha
+    '''
+    accumulated_transmittance = torch.cumprod(alphas, 1)
+    return torch.cat((torch.ones((accumulated_transmittance.shape[0], 1), device=alphas.device),
+                      accumulated_transmittance[:, :-1]), dim=-1)
+
+@torch.no_grad()
+def test(model, hn, hf, dataset, chunk_size=10, img_index=0, nb_bins=192, H=400, W=400):
+    ray_origins = dataset[img_index * H * W: (img_index + 1) * H * W, :3]
+    ray_directions = dataset[img_index * H * W: (img_index + 1) * H * W, 3:6]
+
+    data = []
+    for i in range(int(np.ceil(H / chunk_size))):
+        ray_origins_ = ray_origins[i * W * chunk_size: (i + 1) * W * chunk_size].to(device)
+        ray_directions_ = ray_directions[i * W * chunk_size: (i + 1) * W * chunk_size].to(device)
+
+        regenerated_px_values = volume_rendering(model, ray_origins_, ray_directions_, hn=hn, hf=hf, nb_bins=nb_bins)
+        data.append(regenerated_px_values)
+    img = torch.cat(data).data.cpu().numpy().reshape(H, W, 3)
+
+    plt.figure()
+    plt.imshow(img)
+    plt.savefig(f'novel_views/img_{img_index}.png', bbox_inches='tight')
+    plt.close()    
+
+def train(nerf_model, optimizer, scheduler, data_loader,  device, 
+          num_epochs=int(1e5), hn=0, hf=1, num_bins=192, H=400, W=400):
     training_loss = []
     for _ in tqdm(range(num_epochs)):
         for batch in data_loader:
-            ray_origins = batch[:, 3].to(device)
+            ray_origins = batch[:, :3].to(device)
             ray_directions = batch[:, 3:6].to(device)
             ground_truth_pixels = batch[:, 6:].to(device)
             regenerated_pixels = volume_rendering(nerf_model, ray_origins, ray_directions)            
@@ -115,8 +145,21 @@ def train(nerf_model, data_loader, optimizer, scheduler,  device, num_epochs=int
             training_loss.append(loss.item)
         scheduler.step() # scheduler is used to change lr after certain epochs
         
+        for img_index in range(200):
+            test(nerf_model, hn, hf, testing_dataset, img_index=img_index, nb_bins=num_bins, H=H, W=W)    
+    
     return training_loss
             
             
 if __name__ == '__main__':
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    
+    training_dataset = torch.from_numpy(np.load('D:/Data/NeRF/training_data.pkl', allow_pickle=True))
+    testing_dataset = torch.from_numpy(np.load('D:/Data/NeRF/testing_data.pkl', allow_pickle=True))
+    model = NeRFModel(hidden_dim=256).to(device)
+    model_optimizer = torch.optim.Adam(model.parameters(), lr=5e-4)
+    scheduler = torch.optim.lr_scheduler.MultiStepLR(model_optimizer, milestones=[2, 4, 8], gamma=0.5)
+
+    data_loader = DataLoader(training_dataset, batch_size=1024, shuffle=True)
+    train(model, model_optimizer, scheduler, data_loader, num_epochs=16, device=device, hn=2, hf=6, num_bins=192, H=400,
+          W=400)
