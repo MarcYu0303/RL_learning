@@ -9,7 +9,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 class NeRFModel(nn.Module):
     def __init__(self, x_embedding_dim=10, d_embedding_dim=4,
-                 hidden_dim=256) -> None:
+                 hidden_dim=128) -> None:
         super(NeRFModel, self).__init__()
         self.block1 = nn.Sequential(
             # +3 --> output = [p]
@@ -77,7 +77,7 @@ class NeRFModel(nn.Module):
         self.load_state_dict(torch.load(dir))
         
 
-def volume_rendering(nerf_model, ray_origins, ray_directions, tn=0, tf=0.5, num_bins=192):
+def volume_rendering(nerf_model, ray_origins, ray_directions, tn, tf, num_bins=192):
     '''
     input:
         ray_origins: [batch_size, 3]
@@ -94,7 +94,7 @@ def volume_rendering(nerf_model, ray_origins, ray_directions, tn=0, tf=0.5, num_
     # exapnd ray_origins.shape[0] (number of rays) times along the 0 dimension
     
     # generate bins upper and lower bounds
-    mid = (t[:, :-1] - t[:, 1:]) / 2
+    mid = (t[:, :-1] + t[:, 1:]) / 2
     lower = torch.cat((t[:, :1], mid), -1)
     upper = torch.cat((mid, t[:, -1:]), -1)
     u =  torch.rand(t.shape, device=device) # perturb sampling 
@@ -142,22 +142,23 @@ def test(model, tn, tf, dataset, chunk_size=10, img_index=0, num_bins=192, H=400
     plt.savefig(f'./NeRF/novel_views/img_{img_index}.png', bbox_inches='tight')
     plt.close()    
 
-def train(nerf_model, optimizer, scheduler, data_loader,  device, 
+def train(nerf_model, optimizer, scheduler, data_loader,  device='cpu', 
           num_epochs=int(1e5), tn=0, tf=1, num_bins=192, H=400, W=400) -> None:
+    step = 0
     for _ in tqdm(range(num_epochs)):
-        training_loss = []
         for batch in tqdm(data_loader, total=int(training_dataset.shape[0]/batch_size)):
             ray_origins = batch[:, :3].to(device)
             ray_directions = batch[:, 3:6].to(device)
             ground_truth_pixels = batch[:, 6:].to(device)
-            regenerated_pixels = volume_rendering(nerf_model, ray_origins, ray_directions)            
+            regenerated_pixels = volume_rendering(nerf_model, ray_origins, 
+                                                  ray_directions, tn=tn, tf=tf, num_bins=num_bins)          
             
-            loss = nn.functional.mse_loss(ground_truth_pixels, regenerated_pixels)
+            loss = ((ground_truth_pixels - regenerated_pixels) ** 2).sum()
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-            training_loss.append(loss.item)
-            writer.add_scalar(tag='loss', scalar_value=training_loss)
+            writer.add_scalar('loss', loss.item(), step)
+            step += 1
         scheduler.step() # scheduler is used to change lr after certain epochs
         nerf_model.save_model()
         
@@ -176,7 +177,7 @@ if __name__ == '__main__':
     model = NeRFModel(hidden_dim=256).to(device)
     model_optimizer = torch.optim.Adam(model.parameters(), lr=5e-4)
     scheduler = torch.optim.lr_scheduler.MultiStepLR(model_optimizer, milestones=[2, 4, 8], gamma=0.5)
-    writer = SummaryWriter(log_dir=time)
+    writer = SummaryWriter(log_dir=f'./NeRF/tensorboard/time')
 
     data_loader = DataLoader(training_dataset, batch_size=1024, shuffle=True)
     train(model, model_optimizer, scheduler, data_loader, num_epochs=16, device=device, tn=2, tf=6, num_bins=192, H=400,

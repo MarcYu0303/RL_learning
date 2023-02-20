@@ -23,7 +23,7 @@ class NeRF_Evaluation:
         plt.figure()
         plt.imshow(img)
         plt.savefig(f'./NeRF/novel_views/groundtruth_img_{img_index}.png', bbox_inches='tight')
-        plt.close()    
+        plt.close()  
         
 
 
